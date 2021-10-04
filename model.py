@@ -39,19 +39,10 @@ class ConditionalGAN:
         imageInput = Input(shape=inputShape)
         imageLabelConcat = Concatenate()([imageInput, labelShaped])
 
-        conv1 = Conv2D(64, (4,4), (2,2), padding='same', kernel_initializer=init)(imageLabelConcat)
-        if batchNorm:
-            conv1 = BatchNormalization()(conv1)
-        actv1 = LeakyReLU(0.2)(conv1)
-        drop1 = Dropout(0.4)(actv1)
+        convLayerFilters = [128, 128]
+        convLayer = self.buildConvLayers(convLayerFilters, batchNorm, init, imageLabelConcat)
 
-        conv2 = Conv2D(128, (4,4), (2,2), padding='same', kernel_initializer=init)(drop1)
-        if batchNorm:
-            conv2 = BatchNormalization()(conv2)
-        actv2 = LeakyReLU(0.2)(conv2)
-        drop2 = Dropout(0.4)(actv2)
-
-        flattenLayer = Flatten()(drop2)
+        flattenLayer = Flatten()(convLayer)
         outputLayer = Dense(1, activation='sigmoid')(flattenLayer)
         model = Model([imageInput, labelInput], outputLayer)
 
@@ -68,28 +59,19 @@ class ConditionalGAN:
         labelDense = Dense(labelInputNodes, kernel_initializer=init)(labelEmbedding)
         labelShaped = Reshape((imageDim, imageDim, 1))(labelDense)
 
-        imageInputFilters = 256
+        imageInputFilters = 128
         imageInputNodes = imageInputFilters * imageDim * imageDim
         imageInput = Input(shape=(latentDim,))
         imageDense = Dense(imageInputNodes, kernel_initializer=init)(imageInput)
-        imageActv = ReLU()(imageDense)
+        imageActv = LeakyReLU(0.2)(imageDense)
         imageShaped = Reshape((imageDim, imageDim, imageInputFilters))(imageActv)
 
-        imageLabelConcat = Concatenate()([labelShaped, imageShaped])
+        imageLabelConcat = Concatenate()([imageShaped, labelShaped])
 
-        conv1 = Conv2DTranspose(128, (4,4), (2,2), padding='same', kernel_initializer=init)(imageLabelConcat)
-        if batchNorm:
-            conv1 = BatchNormalization()(conv1)
-        actv1 = ReLU()(conv1)
-        drop1 = Dropout(0.4)(actv1)
+        convLayerFilters = [128, 128]
+        convLayer = self.buildConvTransposeLayers(convLayerFilters, batchNorm, init, imageLabelConcat)
 
-        conv2 = Conv2DTranspose(128, (4,4), (2,2), padding='same', kernel_initializer=init)(drop1)
-        if batchNorm:
-            conv2 = BatchNormalization()(conv2)
-        actv2 = ReLU()(conv2)
-        drop2 = Dropout(0.4)(actv2)
-
-        outputLayer = Conv2D(1, (7,7), padding='same', activation='tanh', kernel_initializer=init)(drop2)
+        outputLayer = Conv2D(1, (7,7), padding='same', activation='tanh', kernel_initializer=init)(convLayer)
         model = Model([imageInput, labelInput], outputLayer)
         return model
 
@@ -108,11 +90,39 @@ class ConditionalGAN:
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
+    def buildConvLayer(self, filters, batchNorm, kernelInit, inLayer):
+        layer = Conv2D(filters, (4,4), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
+        if batchNorm:
+            layer = BatchNormalization()(layer)
+        layer = LeakyReLU(0.2)(layer)
+        outLayer = Dropout(0.4)(layer)
+        return outLayer
+
+    def buildConvTransposeLayer(self, filters, batchNorm, kernelInit, inLayer):
+        layer = Conv2DTranspose(filters, (4,4), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
+        if batchNorm:
+            layer = BatchNormalization()(layer)
+        layer = LeakyReLU(0.2)(layer)
+        outLayer = Dropout(0.4)(layer)
+        return outLayer
+
+    def buildConvLayers(self, filters:list, batchNorm, kernelInit, inLayer):
+        layer = inLayer
+        for f in filters:
+            layer = self.buildConvLayer(f, batchNorm, kernelInit, layer)
+        return layer
+
+    def buildConvTransposeLayers(self, filters:list, batchNorm, kernelInit, inLayer):
+        layer = inLayer
+        for f in filters:
+            layer = self.buildConvTransposeLayer(f, batchNorm, kernelInit, layer)
+        return layer
+
     def train(self, epochs, batchSize, evalFreq):
         if not os.path.exists(self.evalDirectoryName):
             os.makedirs(self.evalDirectoryName)
 
-        batchesPerEpoch = int(self.data.dataset.shape[0] / batchSize)
+        batchesPerEpoch = int(self.data.getDatasetShape() / batchSize)
         halfBatch = int(batchSize / 2)
 
         self.plotStartingImageSamples()
@@ -136,14 +146,16 @@ class ConditionalGAN:
                 self.fakeAccHistory.append(dFakeAcc)
                 self.lossHistory.append(gLoss)
 
-                metrics = ('>%d, %d/%d, dRealLoss=%.3f, dFakeLoss=%.3f, gLoss=%.3f' %
+                metrics = ('> %d, %d/%d, dRealLoss=%.3f, dFakeLoss=%.3f, gLoss=%.3f' %
                     (i + 1, j, batchesPerEpoch, dRealLoss, dFakeLoss, gLoss))
                 self.metricHistory.append(metrics)
                 print(metrics)
 
             if (i + 1) % evalFreq == 0:
+                elaspedTime = f'> elapsed time: {self.getElapsedTime()}'
+                self.metricHistory.append(elaspedTime)
+                print(elaspedTime)
                 self.evaluate(i + 1)
-                self.printElapsedTime()
 
     def evaluate(self, epoch, samples=150):
         xReal, yReal = self.data.generateRealTrainingSamples(samples)
@@ -154,32 +166,36 @@ class ConditionalGAN:
 
         print('>%d accuracy real: %.0f%%, fake: %.0f%%' % (epoch, dRealAcc * 100, dFakeAcc * 100))
 
-        modelFilename = '%s/generated_model_e%03d.h5' % self.evalDirectoryName, epoch
+        modelFilename = '%s/generated_model_e%03d.h5' % (self.evalDirectoryName, epoch)
         self.generator.save(modelFilename)
 
-        metricsFilename = '%s/metrics_e%03d.txt' % self.evalDirectoryName, epoch
+        metricsFilename = '%s/metrics_e%03d.txt' % (self.evalDirectoryName, epoch)
         with open(metricsFilename, 'w') as fd:
             for i in self.metricHistory:
                 fd.write(i + '\n')
-            self.metricHistory = list()
+            self.metricHistory.clear()
 
         self.plotImageSamples(xFake, epoch)
 
         self.plotHistory(epoch)
 
     def plotImageSamples(self, samples, epoch, n=10):
-        scaledSamples = (samples + 1) / 2.0 # scale from -1,1 to 0,1
+        images, _ = samples
+        scaledImages = (images + 1) / 2.0 # scale from -1,1 to 0,1
 
         for i in range(n * n):
             pyplot.subplot(n, n, i + 1)
             pyplot.axis('off')
-            pyplot.imshow(scaledSamples[i, :, :, 0], cmap='gray_r')
+            pyplot.imshow(scaledImages[i, :, :, 0], cmap='gray_r')
 
-        filename = '%s/generated_plot_e%03d.png' % self.evalDirectoryName, epoch
+        filename = '%s/generated_plot_e%03d.png' % (self.evalDirectoryName, epoch)
         pyplot.savefig(filename)
         pyplot.close()
 
     def plotStartingImageSamples(self, samples=150):
+        xReal, _ = self.data.generateRealTrainingSamples(samples)
+        self.plotImageSamples(xReal, -1)
+
         xFake, _ = self.data.generateFakeTrainingSamples(self.generator, self.latentDim, samples)
         self.plotImageSamples(xFake, 0)
 
@@ -195,12 +211,12 @@ class ConditionalGAN:
         pyplot.plot(self.fakeAccHistory, label='accFake')
         pyplot.legend()
 
-        pyplot.savefig('%s/loss_acc_history_e%03d.png' % self.evalDirectoryName, epoch)
+        pyplot.savefig('%s/loss_acc_history_e%03d.png' % (self.evalDirectoryName, epoch))
         pyplot.close()
 
-    def printElapsedTime(self):
+    def getElapsedTime(self):
         elapsedTime = time.time() - self.startTime
-        print('Elapsed time:', str(datetime.timedelta(seconds=elapsedTime)))
+        return str(datetime.timedelta(seconds=elapsedTime))
 
     def summary(self):
         print('\nDiscriminator\n')

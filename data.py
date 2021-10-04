@@ -10,6 +10,10 @@ class Data():
     def __init__(self) -> None:
         self.dataset = self.loadDataset()
 
+    def getDatasetShape(self):
+        images, _ = self.dataset
+        return images.shape[0]
+
     def loadDataset(self):
         (trainX, y), (_, _) = load_data()
         X = expand_dims(trainX, axis=-1)
