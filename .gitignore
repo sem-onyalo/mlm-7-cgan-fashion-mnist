@@ -107,3 +107,6 @@ ENV/
 
 # Evaluation data
 eval/
+
+# Key pair file
+*.pem
