@@ -91,7 +91,7 @@ class ConditionalGAN:
         return model
 
     def buildConvLayer(self, filters, batchNorm, kernelInit, inLayer):
-        layer = Conv2D(filters, (4,4), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
+        layer = Conv2D(filters, (3,3), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
         if batchNorm:
             layer = BatchNormalization()(layer)
         layer = LeakyReLU(0.2)(layer)
