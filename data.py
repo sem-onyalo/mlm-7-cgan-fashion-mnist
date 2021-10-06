@@ -4,7 +4,7 @@ from numpy.random import randint
 from numpy.random import randn
 from numpy import zeros
 from numpy import ones
-from tensorflow import cast, float32
+from tensorflow import compat, executing_eagerly
 from tensorflow.keras.models import Model
 
 class Data():
@@ -18,7 +18,8 @@ class Data():
     def loadDataset(self):
         (trainX, y), (_, _) = load_data()
         X = expand_dims(trainX, axis=-1)
-        X = cast(X, float32)
+        X = X.numpy() if executing_eagerly() else X.eval(session=compat.v1.Session())
+        X = X.astype('float32')
         X = (X - 127.5) / 127.5 # scale from 0,255 to -1,1
         return [X, y]
 
