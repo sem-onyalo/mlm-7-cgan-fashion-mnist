@@ -11,13 +11,31 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 
 class ConditionalGAN:
-    def __init__(self, data:Data, inputShape, imageDim, labelDim, latentDim, classes=10) -> None:
+    def __init__(self, data:Data, inputShape, imageDim, labelDim, latentDim, classes, params=None) -> None:
+        self.initHyperParameters(params)
+        self.initMetricsVars()
+        self.evalDirectoryName = 'eval'
+
         self.data = data
         self.latentDim = latentDim
         self.discriminator = self.createDiscriminator(inputShape, labelDim, classes)
         self.generator = self.createGenerator(latentDim, imageDim, labelDim, classes)
         self.gan = self.createGan()
 
+    def initHyperParameters(self, params):
+        self.convFilters = [int(x) for x in params.convFilters.split(',')]
+        self.convTransposeFilters = [int(x) for x in params.convTransposeFilters.split(',')]
+        self.adamLearningRate = params.adamLearningRate
+        self.adamBeta1 = params.adamBeta1
+        self.kernelInitStdDev = params.kernelInitStdDev
+        self.generatorInputFilters = params.generatorInputFilters
+        self.leakyReluAlpha = params.leakyReluAlpha
+        self.dropoutRate = params.dropoutRate
+        self.convLayerKernelSize = (3,3)
+        self.convTransposeLayerKernelSize = (4,4)
+        self.generatorOutputLayerKernelSize = (7,7)
+
+    def initMetricsVars(self):
         self.realLossHistory = list()
         self.realAccHistory = list()
         self.fakeLossHistory = list()
@@ -25,11 +43,9 @@ class ConditionalGAN:
         self.lossHistory = list()
         self.metricHistory = list()
 
-        self.evalDirectoryName = 'eval'
-
     def createDiscriminator(self, inputShape, labelDim, classes, batchNorm=True) -> Model:
         labelInputNodes = inputShape[0] * inputShape[1]
-        init = RandomNormal(stddev=0.02)
+        init = RandomNormal(stddev=self.kernelInitStdDev)
 
         labelInput = Input(shape=(1,))
         labelEmbedding = Embedding(classes, labelDim)(labelInput)
@@ -39,39 +55,36 @@ class ConditionalGAN:
         imageInput = Input(shape=inputShape)
         imageLabelConcat = Concatenate()([imageInput, labelShaped])
 
-        convLayerFilters = [128, 128]
-        convLayer = self.buildConvLayers(convLayerFilters, batchNorm, init, imageLabelConcat)
+        convLayer = self.buildConvLayers(batchNorm, init, imageLabelConcat)
 
         flattenLayer = Flatten()(convLayer)
         outputLayer = Dense(1, activation='sigmoid')(flattenLayer)
         model = Model([imageInput, labelInput], outputLayer)
 
-        opt = Adam(learning_rate=0.0002, beta_1=0.5)
+        opt = Adam(learning_rate=self.adamLearningRate, beta_1=self.adamBeta1)
         model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
         return model
 
     def createGenerator(self, latentDim, imageDim, labelDim, classes, batchNorm=True) -> Model:
         labelInputNodes = imageDim * imageDim
-        init = RandomNormal(stddev=0.02)
+        init = RandomNormal(stddev=self.kernelInitStdDev)
 
         labelInput = Input(shape=(1,))
         labelEmbedding = Embedding(classes, labelDim)(labelInput)
         labelDense = Dense(labelInputNodes, kernel_initializer=init)(labelEmbedding)
         labelShaped = Reshape((imageDim, imageDim, 1))(labelDense)
 
-        imageInputFilters = 128
-        imageInputNodes = imageInputFilters * imageDim * imageDim
+        imageInputNodes = self.generatorInputFilters * imageDim * imageDim
         imageInput = Input(shape=(latentDim,))
         imageDense = Dense(imageInputNodes, kernel_initializer=init)(imageInput)
-        imageActv = LeakyReLU(0.2)(imageDense)
-        imageShaped = Reshape((imageDim, imageDim, imageInputFilters))(imageActv)
+        imageActv = LeakyReLU(self.leakyReluAlpha)(imageDense)
+        imageShaped = Reshape((imageDim, imageDim, self.generatorInputFilters))(imageActv)
 
         imageLabelConcat = Concatenate()([imageShaped, labelShaped])
 
-        convLayerFilters = [128, 128]
-        convLayer = self.buildConvTransposeLayers(convLayerFilters, batchNorm, init, imageLabelConcat)
+        convLayer = self.buildConvTransposeLayers(batchNorm, init, imageLabelConcat)
 
-        outputLayer = Conv2D(1, (7,7), padding='same', activation='tanh', kernel_initializer=init)(convLayer)
+        outputLayer = Conv2D(1, self.generatorOutputLayerKernelSize, padding='same', activation='tanh', kernel_initializer=init)(convLayer)
         model = Model([imageInput, labelInput], outputLayer)
         return model
 
@@ -86,35 +99,35 @@ class ConditionalGAN:
         ganOutput = self.discriminator([genOutput, genLabelInput])
         model = Model([genImageInput, genLabelInput], ganOutput)
 
-        opt = Adam(learning_rate=0.002, beta_1=0.5)
+        opt = Adam(learning_rate=self.adamLearningRate, beta_1=self.adamBeta1)
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
     def buildConvLayer(self, filters, batchNorm, kernelInit, inLayer):
-        layer = Conv2D(filters, (3,3), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
+        layer = Conv2D(filters, self.convLayerKernelSize, (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
         if batchNorm:
             layer = BatchNormalization()(layer)
-        layer = LeakyReLU(0.2)(layer)
-        outLayer = Dropout(0.4)(layer)
+        layer = LeakyReLU(self.leakyReluAlpha)(layer)
+        outLayer = Dropout(self.dropoutRate)(layer)
         return outLayer
 
     def buildConvTransposeLayer(self, filters, batchNorm, kernelInit, inLayer):
-        layer = Conv2DTranspose(filters, (4,4), (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
+        layer = Conv2DTranspose(filters, self.convTransposeLayerKernelSize, (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
         if batchNorm:
             layer = BatchNormalization()(layer)
-        layer = LeakyReLU(0.2)(layer)
-        outLayer = Dropout(0.4)(layer)
+        layer = LeakyReLU(self.leakyReluAlpha)(layer)
+        outLayer = Dropout(self.dropoutRate)(layer)
         return outLayer
 
-    def buildConvLayers(self, filters:list, batchNorm, kernelInit, inLayer):
+    def buildConvLayers(self, batchNorm, kernelInit, inLayer):
         layer = inLayer
-        for f in filters:
+        for f in self.convFilters:
             layer = self.buildConvLayer(f, batchNorm, kernelInit, layer)
         return layer
 
-    def buildConvTransposeLayers(self, filters:list, batchNorm, kernelInit, inLayer):
+    def buildConvTransposeLayers(self, batchNorm, kernelInit, inLayer):
         layer = inLayer
-        for f in filters:
+        for f in self.convTransposeFilters:
             layer = self.buildConvTransposeLayer(f, batchNorm, kernelInit, layer)
         return layer
 
