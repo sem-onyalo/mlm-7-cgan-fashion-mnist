@@ -1,7 +1,7 @@
 import argparse
 
 from data import Data
-from model import ConditionalGAN
+from model import ConditionalGAN, Inference
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -10,6 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('--batchsize', '-b', type=int, default=128, help='The training batch size')
     parser.add_argument('--evalfreq', '-v', type=int, default=10, help='Frequency to run model evaluations')
     parser.add_argument('--classes', '-c', type=int, default=10, help='Number of classes in the training data')
+    parser.add_argument('--modelPath', '-m', type=str, default=None, help='Path to model to load. If this is set script will run inference instead of training.')
     parser.add_argument('--convFilters', type=str, default='128,128', help='')
     parser.add_argument('--convTransposeFilters', type=str, default='128,128', help='')
     parser.add_argument('--adamLearningRate', type=float, default=0.0002, help='')
@@ -24,6 +25,11 @@ if __name__ == '__main__':
     dLabelDim = 50
     dImageDim = 7
 
-    data = Data()
-    model = ConditionalGAN(data, dInputShape, dImageDim, dLabelDim, args.latentDim, args.classes, args)
-    model.train(args.epochs, args.batchsize, args.evalfreq)
+    data = Data(args.classes)
+
+    if args.modelPath == None:
+        model = ConditionalGAN(data, dInputShape, dImageDim, dLabelDim, args.latentDim, args.classes, args)
+        model.train(args.epochs, args.batchsize, args.evalfreq)
+    else:
+        inference = Inference(data, args.modelPath, args.latentDim)
+        inference.run()

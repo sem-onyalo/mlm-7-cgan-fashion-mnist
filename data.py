@@ -1,15 +1,15 @@
 from keras.backend import expand_dims
 from keras.datasets.fashion_mnist import load_data
+from numpy import ones, zeros, asarray
 from numpy.random import randint
 from numpy.random import randn
-from numpy import zeros
-from numpy import ones
 from tensorflow import compat, executing_eagerly
 from tensorflow.keras.models import Model
 
 class Data():
-    def __init__(self) -> None:
+    def __init__(self, classes) -> None:
         self.dataset = self.loadDataset()
+        self.classes = classes
 
     def getDatasetShape(self):
         images, _ = self.dataset
@@ -31,18 +31,27 @@ class Data():
         return [X, labels], y
 
     def generateFakeTrainingSamples(self, generator:Model, latentDim, samples):
-        x, labels = self.generateLatentPoints(latentDim, samples)
+        x, labels = self.generateLatentPointsAndRandomLabels(latentDim, samples)
         X = generator.predict([x, labels])
         y = zeros((samples, 1))
         return [X, labels], y
 
     def generateFakeTrainingGanSamples(self, latentDim, samples):
-        X, labels = self.generateLatentPoints(latentDim, samples)
+        X, labels = self.generateLatentPointsAndRandomLabels(latentDim, samples)
         y = ones((samples, 1))
         return [X, labels], y
 
-    def generateLatentPoints(self, latentDim, samples, classes=10):
+    def generateLatentPointsAndRandomLabels(self, latentDim, samples):
+        x = self.generateLatentPoints(latentDim, samples)
+        labels = randint(0, self.classes, samples)
+        return [x, labels]
+
+    def generateLatentPointsAndOrderedLabels(self, latentDim, samples):
+        x = self.generateLatentPoints(latentDim, samples)
+        labels = asarray([x for _ in range(self.classes) for x in range(int(samples/self.classes))])
+        return [x, labels]
+
+    def generateLatentPoints(self, latentDim, samples):
         x = randn(latentDim * samples)
         x = x.reshape((samples, latentDim))
-        labels = randint(0, classes, samples)
-        return [x, labels]
+        return x
