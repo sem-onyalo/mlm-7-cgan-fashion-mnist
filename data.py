@@ -30,8 +30,12 @@ class Data():
         y = ones((samples, 1))
         return [X, labels], y
 
-    def generateFakeTrainingSamples(self, generator:Model, latentDim, samples):
-        x, labels = self.generateLatentPointsAndRandomLabels(latentDim, samples)
+    def generateFakeTrainingSamples(self, generator:Model, latentDim, samples, random=True):
+        if random == True:
+            x, labels = self.generateLatentPointsAndRandomLabels(latentDim, samples)
+        else:
+            x, labels = self.generateLatentPointsAndOrderedLabels(latentDim, samples)
+
         X = generator.predict([x, labels])
         y = zeros((samples, 1))
         return [X, labels], y
@@ -48,7 +52,7 @@ class Data():
 
     def generateLatentPointsAndOrderedLabels(self, latentDim, samples):
         x = self.generateLatentPoints(latentDim, samples)
-        labels = asarray([x for _ in range(self.classes) for x in range(int(samples/self.classes))])
+        labels = asarray([x for _ in range(int(samples/self.classes)) for x in range(self.classes)])
         return [x, labels]
 
     def generateLatentPoints(self, latentDim, samples):

@@ -188,11 +188,16 @@ class ConditionalGAN:
                 fd.write(i + '\n')
             self.metricHistory.clear()
 
-        self.plotImageSamples(xFake, epoch)
+        outputPath = f'{self.evalDirectoryName}/generated_plot_e{epoch}r.png'
+        self.plotImageSamples(xFake, outputPath)
+
+        xFakeOrdered, _ = self.data.generateFakeTrainingSamples(self.generator, self.latentDim, samples, False)
+        outputPath = f'{self.evalDirectoryName}/generated_plot_e{epoch}o.png'
+        self.plotImageSamples(xFakeOrdered, outputPath)
 
         self.plotHistory(epoch)
 
-    def plotImageSamples(self, samples, epoch, n=10):
+    def plotImageSamples(self, samples, outputPath, n=10):
         images, _ = samples
         scaledImages = (images + 1) / 2.0 # scale from -1,1 to 0,1
 
@@ -201,16 +206,15 @@ class ConditionalGAN:
             pyplot.axis('off')
             pyplot.imshow(scaledImages[i, :, :, 0], cmap='gray_r')
 
-        filename = '%s/generated_plot_e%03d.png' % (self.evalDirectoryName, epoch)
-        pyplot.savefig(filename)
+        pyplot.savefig(outputPath)
         pyplot.close()
 
     def plotStartingImageSamples(self, samples=150):
         xReal, _ = self.data.generateRealTrainingSamples(samples)
-        self.plotImageSamples(xReal, -1)
+        self.plotImageSamples(xReal, f'{self.evalDirectoryName}/target_plot.png')
 
         xFake, _ = self.data.generateFakeTrainingSamples(self.generator, self.latentDim, samples)
-        self.plotImageSamples(xFake, 0)
+        self.plotImageSamples(xFake, f'{self.evalDirectoryName}/generated_plot_e0.png')
 
     def plotHistory(self, epoch):
         pyplot.subplot(2, 1, 1)
