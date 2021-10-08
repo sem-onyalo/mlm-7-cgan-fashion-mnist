@@ -104,12 +104,21 @@ class ConditionalGAN:
         return model
 
     def buildConvLayer(self, filters, batchNorm, kernelInit, inLayer):
+        # downsample layers
         layer = Conv2D(filters, self.convLayerKernelSize, (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
         if batchNorm:
             layer = BatchNormalization()(layer)
         layer = LeakyReLU(self.leakyReluAlpha)(layer)
-        outLayer = Dropout(self.dropoutRate)(layer)
-        return outLayer
+        layer = Dropout(self.dropoutRate)(layer)
+
+        # normal sample layers
+        layer = Conv2D(filters, self.convLayerKernelSize, padding='same', kernel_initializer=kernelInit)(layer)
+        if batchNorm:
+            layer = BatchNormalization()(layer)
+        layer = LeakyReLU(self.leakyReluAlpha)(layer)
+        layer = Dropout(self.dropoutRate)(layer)
+
+        return layer
 
     def buildConvTransposeLayer(self, filters, batchNorm, kernelInit, inLayer):
         layer = Conv2DTranspose(filters, self.convTransposeLayerKernelSize, (2,2), padding='same', kernel_initializer=kernelInit)(inLayer)
@@ -273,7 +282,3 @@ class Inference:
         filename = f'{self.evalDirectoryName}/generated_samples.png'
         pyplot.savefig(filename)
         pyplot.close()
-
-if __name__ == '__main__':
-    model = ConditionalGAN((28,28,1), 7, 50, 100)
-    model.summary()
