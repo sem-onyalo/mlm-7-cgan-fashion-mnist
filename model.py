@@ -165,9 +165,6 @@ class ConditionalGAN:
                 print(metrics)
 
             if (i + 1) % evalFreq == 0:
-                elaspedTime = f'> elapsed time: {self.getElapsedTime()}'
-                self.metricHistory.append(elaspedTime)
-                print(elaspedTime)
                 self.evaluate(i + 1)
 
     def evaluate(self, epoch, samples=150):
@@ -177,7 +174,13 @@ class ConditionalGAN:
         xFake, yFake = self.data.generateFakeTrainingSamples(self.generator, self.latentDim, samples)
         _, dFakeAcc = self.discriminator.evaluate(xFake, yFake)
 
-        print('>%d accuracy real: %.0f%%, fake: %.0f%%' % (epoch, dRealAcc * 100, dFakeAcc * 100))
+        accuracyMetrics = '> %d, accuracy real: %.0f%%, fake: %.0f%%' % (epoch, dRealAcc * 100, dFakeAcc * 100)
+        self.metricHistory.append(accuracyMetrics)
+        print(accuracyMetrics)
+
+        elaspedTime = f'> {epoch}, elapsed time: {self.getElapsedTime()}'
+        self.metricHistory.append(elaspedTime)
+        print(elaspedTime)
 
         modelFilename = '%s/generated_model_e%03d.h5' % (self.evalDirectoryName, epoch)
         self.generator.save(modelFilename)
