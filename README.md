@@ -25,6 +25,12 @@ python model.py
 python main.py
 ```
 
+## Run
+
+```
+python main.py --modelPath <path-to-model>
+```
+
 ## Reference
 
 https://machinelearningmastery.com/generative_adversarial_networks/
