@@ -13,10 +13,10 @@ python -m venv env
 pip install -r requirements.txt
 ```
 
-## Architecture
+## View Architecture
 
 ```
-python model.py
+python main.py --summary
 ```
 
 ## Train
@@ -25,7 +25,7 @@ python model.py
 python main.py
 ```
 
-## Run
+## Generate Images
 
 ```
 python main.py --modelPath <path-to-model>
